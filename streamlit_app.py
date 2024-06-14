@@ -1,4 +1,4 @@
-#pip install lida[transformers]
+!pip install lida[transformers]
 from lida import Manager, TextGenerationConfig , llm
 from dotenv import load_dotenv
 import os
