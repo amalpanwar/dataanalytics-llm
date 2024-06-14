@@ -1,40 +1,58 @@
-import altair as alt
-import numpy as np
-import pandas as pd
+!pip install lida[transformers]
+from lida import Manager, TextGenerationConfig , llm
+from dotenv import load_dotenv
+import os
+#import openai
+from PIL import Image
+from io import BytesIO
+import base64
 import streamlit as st
+lida=Manager(text_gen=llm(provider="hf", model="HuggingFaceH4/zephyr-7b-beta", device_map="auto"))
+hf_config = TextGenerationConfig(n=1,temperature=0.5, max_tokens=650, use_cache=True)
 
-"""
-# Welcome to Streamlit!
+def base64_to_image(base64_string):
+    # Decode the base64 string
+    byte_data = base64.b64decode(base64_string)
 
-Edit `/streamlit_app.py` to customize this app to your heart's desire :heart:.
-If you have any questions, checkout our [documentation](https://docs.streamlit.io) and [community
-forums](https://discuss.streamlit.io).
-
-In the meantime, below is an example of what you can do with just a few lines of code:
-"""
-
-num_points = st.slider("Number of points in spiral", 1, 10000, 1100)
-num_turns = st.slider("Number of turns in spiral", 1, 300, 31)
-
-indices = np.linspace(0, 1, num_points)
-theta = 2 * np.pi * num_turns * indices
-radius = indices
-
-x = radius * np.cos(theta)
-y = radius * np.sin(theta)
-
-df = pd.DataFrame({
-    "x": x,
-    "y": y,
-    "idx": indices,
-    "rand": np.random.randn(num_points),
-})
-
-st.altair_chart(alt.Chart(df, height=700, width=700)
-    .mark_point(filled=True)
-    .encode(
-        x=alt.X("x", axis=None),
-        y=alt.Y("y", axis=None),
-        color=alt.Color("idx", legend=None, scale=alt.Scale()),
-        size=alt.Size("rand", legend=None, scale=alt.Scale(range=[1, 150])),
-    ))
+    # Use BytesIO to convert the byte data to image
+    return Image.open(BytesIO(byte_data))
+menu = st.sidebar.selectbox("Choose an Option", ["Summarize", "EDA"])
+if menu == "Summarize":
+    st.subheader("Summarization of your Data")
+    file_uploader = st.file_uploader("Upload your excel", type="xlsx")
+    if file_uploader is not None:
+        path_to_save = "/content/player_data_unq.xlsx"
+        with open(path_to_save, "wb") as f:
+            f.write(file_uploader.getvalue())
+        summary = lida.summarize("player_data_unq.xlsx", summary_method="llm", textgen_config=hf_config)
+        st.write(summary)
+        goals = lida.goals(summary, n=2, textgen_config=hf_config)
+        for goal in goals:
+            st.write(goal)
+        i = 0
+        library = "Matplotlib"
+        hf_config = TextGenerationConfig(n=1, temperature=0.2, use_cache=True)
+        charts = lida.visualize(summary=summary, goal=goals[i], textgen_config=hf_config, library=library)
+        img_base64_string = charts[0].raster
+        img = base64_to_image(img_base64_string)
+        st.image(img)
+if menu == "EDA":
+    st.subheader("Query your Data to Generate Visuals")
+    file_uploader = st.file_uploader("Upload your excel", type="xlsx")
+    if file_uploader is not None:
+        path_to_save = "/content/player_data_unq.xlsx"
+        with open(path_to_save, "wb") as f:
+            f.write(file_uploader.getvalue())
+        text_area = st.text_area("Query your Data to Generate Visuals", height=200)
+        if st.button("Generate Visuals"):
+            if len(text_area) > 0:
+                st.info("Your Query: " + text_area)
+                lida = Manager(text_gen=llm(provider="hf", model="HuggingFaceH4/zephyr-7b-beta", device_map="auto"))
+                hf_config = TextGenerationConfig(n=1, temperature=0.2, use_cache=True)
+                summary = lida.summarize("player_data_unq.xlsx", summary_method="llm", textgen_config=hf_config)
+                user_query = text_area
+                charts = lida.visualize(summary=summary, goal=user_query, textgen_config=hf_config)
+                charts[0]
+                image_base64 = charts[0].raster
+                img = base64_to_image(image_base64)
+                st.image(img)
